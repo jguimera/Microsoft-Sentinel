@@ -6,4 +6,4 @@ This Playbook summits incident details (Title, Description,Entities, ATT&CK deta
 An Azure OpenAI Endpoint and API key are required in order to work. you can get them from Azure Cognitive services. 
 
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/EncodedURI)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjguimera%2FMicrosoft-Sentinel%2Fmain%2FPlaybooks%2FAzureOpenAI%2FIncident-Summary%2Fazuredeployment.json)
