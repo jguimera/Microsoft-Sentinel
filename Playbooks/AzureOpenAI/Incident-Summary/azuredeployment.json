@@ -1,0 +1,219 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",    
+    "parameters":  {
+        "PlaybookName":  {
+            "defaultValue":  "OpenAISummary",
+            "type":  "string"
+        },
+        "AZUREOPENAIAPIKEY":  {
+            "type":  "string",
+            "metadata":  {
+                "description":  "Enter value for AZUREOPENAIAPIKEY"
+            }
+        },
+        "AZUREOPENAIENDPOINT":  {
+            "type":  "string",
+            "metadata":  {
+                "description":  "Enter value for AZUREOPENAIENDPOINT"
+            }
+        }
+    },
+    "variables": {
+        "MicrosoftSentinelConnectionName":  "[concat('MicrosoftSentinel-', parameters('PlaybookName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlaybookName')]",
+            "location": "eastus",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        },"AZUREOPENAIAPIKEY":  {
+                            "defaultValue":  "[parameters('AZUREOPENAIAPIKEY')]",
+                            "type":  "string"
+                        },
+                        "AZUREOPENAIENDPOINT":  {
+                            "defaultValue":  "[parameters('AZUREOPENAIENDPOINT')]",
+                            "type":  "string"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Azure_OpenAI_-_Parse_Summary_Response": {
+                            "runAfter": {
+                                "Azure_OpenAI_-_Request_summary": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@body('Azure_OpenAI_-_Request_summary')",
+                                "schema": {
+                                    "properties": {
+                                        "choices": {
+                                            "items": {
+                                                "properties": {
+                                                    "index": {
+                                                        "type": "integer"
+                                                    },
+                                                    "logprobs": {},
+                                                    "text": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "text"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "created": {
+                                            "type": "integer"
+                                        },
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "model": {
+                                            "type": "string"
+                                        },
+                                        "object": {
+                                            "type": "string"
+                                        },
+                                        "usage": {
+                                            "properties": {
+                                                "completion_tokens": {
+                                                    "type": "integer"
+                                                },
+                                                "prompt_tokens": {
+                                                    "type": "integer"
+                                                },
+                                                "total_tokens": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "Azure_OpenAI_-_Process_Summary": {
+                            "foreach": "@body('Azure_OpenAI_-_Parse_Summary_Response')?['choices']",
+                            "actions": {
+                                "Azure_OpenAI_add_summary_as_comment": {
+                                    "runAfter": {},
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "body": {
+                                            "incidentArmId": "@triggerBody()?['object']?['id']",
+                                            "message": "<p>(Generated by Azure OpenAI): @{items('Azure_OpenAI_-_Process_Summary')?['text']}</p>"
+                                        },
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "path": "/Incidents/Comment"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Azure_OpenAI_-_Parse_Summary_Response": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Azure_OpenAI_-_Request_summary": {
+                            "runAfter": {
+                                "Azure_OpenAI_API_Key": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Http",
+                            "inputs": {
+                                "body": {
+                                    "frequency_penalty": 0,
+                                    "max_tokens": 2000,
+                                    "presence_penalty": 0,
+                                    "prompt": "<|im_start|>system\nYou are a Security Operations Analyst using  Microsoft Sentinel to investigate a specific security incident. You're going to be provided with information related to a security incident in Microsoft Sentinel. \n\n<|im_end|>\n<|im_start|>assistant\n The security incident title is \"@{triggerBody()?['object']?['properties']?['title']}\".The security incident description is \"@{triggerBody()?['object']?['properties']?['description']}\".The security incident severity is \"@{triggerBody()?['object']?['properties']?['severity']}\". List of entities related to the security incident: @{triggerBody()?['object']?['properties']?['relatedEntities']}.MITRE Technique ID's related to the security incident.\nMITRE Techniques\r\n@{triggerBody()?['object']?['properties']?['additionalData']?['techniques']}\r\n. MITRE Tactics related to the security incident.\nMITRE Tactics\r\n @{triggerBody()?['object']?['properties']?['additionalData']?['tactics']}\r\n\n<|im_end|>\n<|im_start|>user\nSummarize your understanding of this security incident over a few paragraphs detailing all of the related entity information that is present in the provided information If MITRE Techniques or Tactics are present provide a definition for them and how they might relate to this specific security incident. Finally provide a Security Operations Analyst with a list of step by step instructions for how to investigate and respond to this incident.\n<|im_end|><|im_start|>assistant",
+                                    "stop": [
+                                        "<|im_end|>"
+                                    ],
+                                    "temperature": 0.8,
+                                    "top_p": 0.95
+                                },
+                                "headers": {
+                                    "Content-Type": "application/json",
+                                    "api-key": "@variables('Azure-api-key')"
+                                },
+                                "method": "POST",
+                                "uri": "@parameters('AZUREOPENAIENDPOINT')"
+                            }
+                        },
+                        "Azure_OpenAI_API_Key": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Azure-api-key",
+                                        "type": "string",
+                                        "value": "@parameters('AZUREOPENAIAPIKEY')"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId":  "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                                "connectionName":  "[variables('MicrosoftSentinelConnectionName')]",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                },
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
