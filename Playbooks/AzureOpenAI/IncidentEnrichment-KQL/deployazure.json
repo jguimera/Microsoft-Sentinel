@@ -282,8 +282,8 @@
                                                 "method": "post",
                                                 "path": "/visualizeQuery",
                                                 "queries": {
-                                                    "resourcegroups": "[parameters('AzureSentinelLogAnalyticsWorkspaceResourceGroupName')]",
-                                                    "resourcename": "[parameters('AzureSentinelLogAnalyticsWorkspaceName')]",
+                                                    "resourcegroups": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceResourceGroupName')]",
+                                                    "resourcename": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceName')]",
                                                     "resourcetype": "Log Analytics Workspace",
                                                     "subscriptions": "[subscription().id]",
                                                     "timerange": "1h",
