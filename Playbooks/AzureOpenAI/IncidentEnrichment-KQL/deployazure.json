@@ -286,7 +286,7 @@
                                                     "resourcename": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceName')]",
                                                     "resourcetype": "Log Analytics Workspace",
                                                     "subscriptions": "[subscription().id]",
-                                                    "timerange": "1h",
+                                                    "timerange": "24h",
                                                     "visType": "Html Table"
                                                 }
                                             }
@@ -352,11 +352,11 @@
                                 "method": "post",
                                 "path": "/queryData",
                                 "queries": {
-                                    "resourcegroups": "",
-                                    "resourcename": "",
-                                    "resourcetype": "",
-                                    "subscriptions": "",
-                                    "timerange": ""
+                                                    "resourcegroups": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceResourceGroupName')]",
+                                                    "resourcename": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceName')]",
+                                                    "resourcetype": "Log Analytics Workspace",
+                                                    "subscriptions": "[subscription().id]",
+                                                    "timerange": "1h"
                                 }
                             }
                         },
