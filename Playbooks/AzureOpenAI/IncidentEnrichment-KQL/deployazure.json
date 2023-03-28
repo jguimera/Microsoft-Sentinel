@@ -285,7 +285,7 @@
                                                     "resourcegroups": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceResourceGroupName')]",
                                                     "resourcename": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceName')]",
                                                     "resourcetype": "Log Analytics Workspace",
-                                                    "subscriptions": "[subscription().id]",
+                                                    "subscriptions": "[subscription().subscriptionId]",
                                                     "timerange": "24h",
                                                     "visType": "Html Table"
                                                 }
@@ -355,7 +355,7 @@
                                                     "resourcegroups": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceResourceGroupName')]",
                                                     "resourcename": "[parameters('MicrosoftSentinelLogAnalyticsWorkspaceName')]",
                                                     "resourcetype": "Log Analytics Workspace",
-                                                    "subscriptions": "[subscription().id]",
+                                                    "subscriptions": "[subscription().subscriptionId]",
                                                     "timerange": "1h"
                                 }
                             }
