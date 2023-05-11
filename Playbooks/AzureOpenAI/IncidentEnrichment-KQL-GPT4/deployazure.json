@@ -1,0 +1,444 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",    
+    "parameters":  {
+        "PlaybookName":  {
+            "defaultValue":  "AzureOpenAI-Enrichment",
+            "type":  "string"
+        },
+        "AZUREOPENAIAPIKEY":  {
+            "type":  "string",
+            "metadata":  {
+                "description":  "Enter value for AZUREOPENAIAPIKEY"
+            }
+        },
+        "AZUREOPENAIENDPOINT":  {
+            "type":  "string",
+            "metadata":  {
+                "description":  "Enter value for AZUREOPENAIENDPOINT"
+            }
+        },
+        "MicrosoftSentinelLogAnalyticsWorkspaceName": {
+            "defaultValue": "yourAzureSentinelworkspacename",
+            "type": "string"
+        },
+        "MicrosoftSentinelLogAnalyticsWorkspaceResourceGroupName": {
+            "defaultValue": "yourAzureSentinelworkspaceRGname",
+            "type": "string"
+        }
+    },
+    "variables": {
+        "MicrosoftSentinelConnectionName":  "[concat('MicrosoftSentinel-', parameters('PlaybookName'))]",
+        "AzureMonitorLogsConnectionName":  "[concat('AzureMonitor-', parameters('PlaybookName'))]"
+    },
+    "resources": [
+        {
+            "type":  "Microsoft.Web/connections",
+            "apiVersion":  "2016-06-01",
+            "name":  "[variables('MicrosoftSentinelConnectionName')]",
+            "location":  "[resourceGroup().location]",
+            "kind":  "V1",
+            "properties":  {
+                "displayName":  "[variables('MicrosoftSentinelConnectionName')]",
+                "customParameterValues":  {
+                },
+                "parameterValueType":  "Alternative",
+                "api":  {
+                    "id":  "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]"
+                }
+            }
+        },
+        {
+            "type":  "Microsoft.Web/connections",
+            "apiVersion":  "2016-06-01",
+            "name":  "[variables('AzureMonitorLogsConnectionName')]",
+            "location":  "[resourceGroup().location]",
+            "kind":  "V1",
+            "properties":  {
+                "displayName":  "[variables('AzureMonitorLogsConnectionName')]",
+                "customParameterValues":  {
+                },
+                "api":  {
+                    "id":  "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuremonitorlogs')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlaybookName')]",
+            "location": "[resourceGroup().location]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "tags": {
+                "LogicAppsCategory": "security"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                "[resourceId('Microsoft.Web/connections', variables('AzureMonitorLogsConnectionName'))]"
+            ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        },"AZUREOPENAIAPIKEY":  {
+                            "defaultValue":  "[parameters('AZUREOPENAIAPIKEY')]",
+                            "type":  "string"
+                        },
+                        "AZUREOPENAIENDPOINT":  {
+                            "defaultValue":  "[parameters('AZUREOPENAIENDPOINT')]",
+                            "type":  "string"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Azure_OpenAI_-_Create_CSV_from_table_list": {
+                            "inputs": {
+                                "columns": [
+                                    {
+                                        "header": "",
+                                        "value": "@item()?['$table']"
+                                    }
+                                ],
+                                "format": "CSV",
+                                "from": "@body('Azure_OpenAI_-_Retrieve_Available_Tables')?['value']"
+                            },
+                            "runAfter": {
+                                "Azure_OpenAI_-_Retrieve_Available_Tables": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Table"
+                        },
+                        "Azure_OpenAI_-_Parse_KQL_Queries_Response": {
+                            "inputs": {
+                                "content": "@body('Azure_OpenAI_-_Request_KQL_queries_to_triage')",
+                                "schema": {
+                                    "properties": {
+                                        "choices": {
+                                            "items": {
+                                                "properties": {
+                                                    "finish_reason": {
+                                                        "type": "string"
+                                                    },
+                                                    "index": {
+                                                        "type": "integer"
+                                                    },
+                                                    "message": {
+                                                        "properties": {
+                                                            "content": {
+                                                                "type": "string"
+                                                            },
+                                                            "role": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "index",
+                                                    "finish_reason",
+                                                    "message"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "created": {
+                                            "type": "integer"
+                                        },
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "model": {
+                                            "type": "string"
+                                        },
+                                        "object": {
+                                            "type": "string"
+                                        },
+                                        "usage": {
+                                            "properties": {
+                                                "completion_tokens": {
+                                                    "type": "integer"
+                                                },
+                                                "prompt_tokens": {
+                                                    "type": "integer"
+                                                },
+                                                "total_tokens": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            },
+                            "runAfter": {
+                                "Azure_OpenAI_-_Request_KQL_queries_to_triage": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson"
+                        },
+                        "Azure_OpenAI_-_Process_KQL_Queries": {
+                            "actions": {
+                                "Azure_OpenAI_-_Parse_KQL_Queries": {
+                                    "inputs": {
+                                        "content": "@items('Azure_OpenAI_-_Process_KQL_Queries')?['message']?['content']",
+                                        "schema": {
+                                            "properties": {
+                                                "tasks": {
+                                                    "items": {
+                                                        "properties": {
+                                                            "query": {
+                                                                "type": "string"
+                                                            },
+                                                            "title": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "query",
+                                                            "title"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "runAfter": {},
+                                    "type": "ParseJson"
+                                },
+                                "Azure_OpenAI_-_Process_each_KQL_Query": {
+                                    "actions": {
+                                        "Azure_OpenAI_-_Add_KQL_query_as__task": {
+                                            "inputs": {
+                                                "body": {
+                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                    "taskDescription": "<p>@{items('Azure_OpenAI_-_Process_each_KQL_Query')?['query']}</p>",
+                                                    "taskTitle": "@items('Azure_OpenAI_-_Process_each_KQL_Query')?['title']"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/Incidents/CreateTask"
+                                            },
+                                            "runAfter": {},
+                                            "type": "ApiConnection"
+                                        },
+                                        "Azure_OpenAI_-_Add_query_result_as_comment_to_incident": {
+                                            "inputs": {
+                                                "body": {
+                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                    "message": "<p>@{items('Azure_OpenAI_-_Process_each_KQL_Query')?['title']}:<br>\n@{base64ToString(body('Azure_OpenAI_-_Run_KQL_query')?['body'])}</p>"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/Incidents/Comment"
+                                            },
+                                            "runAfter": {
+                                                "Azure_OpenAI_-_Run_KQL_query": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection"
+                                        },
+                                        "Azure_OpenAI_-_Run_KQL_query": {
+                                            "inputs": {
+                                                "body": "@items('Azure_OpenAI_-_Process_each_KQL_Query')?['query']",
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/visualizeQuery",
+                                                "queries": {
+                                                    "resourcegroups": "RG-BV-SENTINEL",
+                                                    "resourcename": "lg-bv-dev-workspace",
+                                                    "resourcetype": "Log Analytics Workspace",
+                                                    "subscriptions": "f8013a22-1cf7-4208-91cf-a7de918a7f72",
+                                                    "timerange": "24h",
+                                                    "visType": "Html Table"
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Azure_OpenAI_-_Add_KQL_query_as__task": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection"
+                                        }
+                                    },
+                                    "foreach": "@body('Azure_OpenAI_-_Parse_KQL_Queries')?['tasks']",
+                                    "runAfter": {
+                                        "Azure_OpenAI_-_Parse_KQL_Queries": [
+                                            "Succeeded",
+                                            "Failed",
+                                            "Skipped",
+                                            "TimedOut"
+                                        ]
+                                    },
+                                    "type": "Foreach"
+                                }
+                            },
+                            "foreach": "@body('Azure_OpenAI_-_Parse_KQL_Queries_Response')?['choices']",
+                            "runAfter": {
+                                "Azure_OpenAI_-_Parse_KQL_Queries_Response": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Azure_OpenAI_-_Request_KQL_queries_to_triage": {
+                            "inputs": {
+                                "body": {
+                                    "frequency_penalty": 0,
+                                    "max_tokens": 2937,
+                                    "messages": [
+                                        {
+                                            "content": "You are a Security Operations Analyst using  Microsoft Sentinel to investigate a specific security incident. You're going to be provided with information related to a security incident in Microsoft Sentinel.",
+                                            "role": "system"
+                                        },
+                                        {
+                                            "content": " The security incident title is: \"@{triggerBody()?['object']?['properties']?['title']}\".The security incident description is: \"@{triggerBody()?['object']?['properties']?['description']}\".The security incident severity is \"@{triggerBody()?['object']?['properties']?['severity']}\".List of entities related to the security incident: @{triggerBody()?['object']?['properties']?['relatedEntities']}.MITRE Technique ID's related to the security incident.\nMITRE Techniques\r\n@{triggerBody()?['object']?['properties']?['additionalData']?['techniques']}\r\n. MITRE Tactics related to the security incident.\nMITRE Tactics\r\n @{triggerBody()?['object']?['properties']?['additionalData']?['tactics']}.\r\n The available tables in Microsoft Sentinel are: @{body('Azure_OpenAI_-_Create_CSV_from_table_list')}. \r\n Return three tasks with KQL queries to triage this incident using the available Microsoft Sentinel tables. Make sure you only use correct column names for each table , limit the results to 20 using the 'limit' kql command and only showing the 5 most important columns using the 'project' command. Respond only with the list of KQL queries (without any other text and ecapgin double quotes) in JSON Format following the following schema: {\"type\": \"object\", \"properties\": {\"tasks\": { \"type\": \"array\", \"items\": {\"type\": \"object\",\"properties\": {\"query\": {\"type\": \"string\"},\"title\": {\"type\": \"string\"}}, \"required\":[\"query\",\"title\"]}}}}\n",
+                                            "role": "user"
+                                        }
+                                    ],
+                                    "presence_penalty": 0,
+                                    "stop": null,
+                                    "temperature": 0.7,
+                                    "top_p": 0.95
+                                },
+                                "headers": {
+                                    "Content-Type": "application/json",
+                                    "api-key": "@variables('Azure-api-key')"
+                                },
+                                "method": "POST",
+                                "uri": "@variables('Azure-endpoint')"
+                            },
+                            "runAfter": {
+                                "Azure_OpenAI_-_Create_CSV_from_table_list": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Http"
+                        },
+                        "Azure_OpenAI_-_Retrieve_Available_Tables": {
+                            "inputs": {
+                                "body": "search \"*\" |where $table !=\"SecurityAlert\" and $table !=\"SecurityIncident\"  | summarize by $table ",
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/queryData",
+                                "queries": {
+                                    "resourcegroups": "RG-BV-SENTINEL",
+                                    "resourcename": "lg-bv-dev-workspace",
+                                    "resourcetype": "Log Analytics Workspace",
+                                    "subscriptions": "f8013a22-1cf7-4208-91cf-a7de918a7f72",
+                                    "timerange": "1h"
+                                }
+                            },
+                            "runAfter": {
+                                "Azure_OpenAI_Endpoint": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection"
+                        },
+                        "Azure_OpenAI_API_Key": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Azure-api-key",
+                                        "type": "string",
+                                        "value": "@parameters('AZUREOPENAIAPIKEY')"
+                                    }
+                                ]
+                            },
+                            "runAfter": {},
+                            "type": "InitializeVariable"
+                        },
+                        "Azure_OpenAI_Endpoint": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Azure-endpoint",
+                                        "type": "string",
+                                        "value": "@parameters('AZUREOPENAIENDPOINT')"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "Azure_OpenAI_API_Key": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId":  "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                                "connectionName":  "[variables('MicrosoftSentinelConnectionName')]",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                },
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]"
+                            },  
+                                "azuremonitorlogs": {
+                                    "connectionId": "[resourceId('Microsoft.Web/connections', variables('AzureMonitorLogsConnectionName'))]",
+                                    "connectionName": "[variables('AzureMonitorLogsConnectionName')]",
+                                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuremonitorlogs')]"
+    
+                                }
+                        }
+                    }
+                }
+            }
+        }
+        
+    ]
+}
