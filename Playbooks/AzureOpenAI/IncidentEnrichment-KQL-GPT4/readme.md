@@ -4,7 +4,9 @@
 This Playbook summits incident details (Title, Description,Entities, ATT&CK details, Sentinel Availabe tables to the Azure OpenAI GPT4 API. It writes the generated KQL queries as Incident Tasks and the results of the queries as a comment.<br><br>
 Generated KQL queries might contain Schema errors. These errors will prevent the query from being executed. However this failure won't stop the rest of the queries from being executed. 
 ### Requirements:
-* An Azure OpenAI Endpoint and API key are required in order to work. You can get them from Azure Cognitive services. 
+* An Azure OpenAI Endpoint and API key are required in order to work. You can get them from Azure Cognitive services.
+  * Endpoint must include the complete URL (with instance, model and API version):
+  * Format: https://[instance-name].openai.azure.com/openai/deployments/[model-name]/chat/completions?api-version=2023-07-01-preview   
 * Assign Sentinel Responder role to the Logic App managed identity in order to add comments to the incident. 
 * Authorize Azure Monitor API Connection to retrieve data from Log Analytics. 
 ### Playbook steps:
