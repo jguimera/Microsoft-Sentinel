@@ -26,7 +26,7 @@ jobs:
       workspaceId: 'cc3ce210-94db-4490-81a8-766eafb57665'
       directory: '${{ github.workspace }}'
       cloudEnv: 'AzureCloud'
-      contentTypes: 'AnalyticsRule,Parser'
+      contentTypes: 'AnalyticsRule,Parser,Playbook'
       branch: 'main'
       sourceControlId: 'f65574df-2bce-4948-ba07-21c23c4e4727'
       rootDirectory: '${{ github.workspace }}'
